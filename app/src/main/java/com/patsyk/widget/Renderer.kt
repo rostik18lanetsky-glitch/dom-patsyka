@@ -506,7 +506,6 @@ object Renderer {
                 drawBody(cx, fcy, 0.0, k); headY = fcy - 76.0 * (k - 1)
                 face(cx, fcy, "happy", "smile", blush = true)
                 strokeP(Pth().apply { m(cx - 30, fcy + 52); q(cx + 50, fcy + 52, cx + 10, fcy + 66) }, withAlpha(OUTLINE, 0.6), 3) // пузико
-                if (anim && frame in 3..5) text("ик!", cx + 78, fcy - 60, 30, true, STATUS_C)
                 // косточки от рыбы
                 line(318, 254, 358, 254, WHITE, 2.5)
                 for (i in 0 until 4) line(326 + i * 8, 247, 326 + i * 8, 261, WHITE, 2)

@@ -11,6 +11,8 @@ import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.roundToInt
+import kotlin.math.sin
+import kotlin.math.PI
 
 /**
  * Рисует сцену «Дом Пацыка» в картинку 680×320 (×2 для чёткости).
@@ -19,7 +21,9 @@ import kotlin.math.roundToInt
 object Renderer {
     private const val W = 680f
     private const val H = 320f
-    private const val SCALE = 2f
+
+    private fun withAlpha(c: Int, a: Double): Int =
+        Color.argb((a.coerceIn(0.0, 1.0) * 255).roundToInt(), Color.red(c), Color.green(c), Color.blue(c))
 
     private fun col(hex: String, a: Double = 1.0): Int {
         val c = Color.parseColor(hex)
@@ -68,6 +72,14 @@ object Renderer {
     private val DARKNESS = col("#000000", 0.86)
 
     private lateinit var cv: Canvas
+
+    // ---- состояние анимации текущего кадра ----
+    private var frame = 0
+    private var frames = 1
+    private var ph = 0.0          // фаза 0..2π
+    private var bob = 0.0         // «дыхание» — смещение тела по вертикали
+    private var blink = false     // кадр, где Пацык моргает
+    private val t01: Double get() = frame.toDouble() / frames  // 0..1 по циклу
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -109,6 +121,10 @@ object Renderer {
         stroke.color = color; stroke.strokeWidth = w.f
         cv.drawLine(x1.f, y1.f, x2.f, y2.f, stroke)
     }
+    private fun strokeOval(x: Number, y: Number, rx: Number, ry: Number, color: Int, w: Number) {
+        stroke.color = color; stroke.strokeWidth = w.f
+        cv.drawOval(x.f - rx.f, y.f - ry.f, x.f + rx.f, y.f + ry.f, stroke)
+    }
     private fun strokeCircle(x: Number, y: Number, r: Number, color: Int, w: Number) {
         stroke.color = color; stroke.strokeWidth = w.f
         cv.drawCircle(x.f, y.f, r.f, stroke)
@@ -140,7 +156,7 @@ object Renderer {
 
     private fun drawBody(cx: Double, cy: Double, squash: Double) {
         val rx = 82.0; val ry = 76.0
-        oval(cx, cy + ry + 2, rx * 1.05, 11, SHADOW)
+        oval(cx, cy - bob + ry + 2, rx * (1.05 - bob * 0.004), 11, SHADOW) // тень стоит на полу
         fillP(blobPath(cx, cy, rx, ry, squash), BODY)
         strokeP(blobPath(cx, cy, rx, ry, squash), OUTLINE, 5)
         oval(cx - 30, cy - ry * 0.45, 18, 9, BODY_HI) // блик
@@ -193,8 +209,9 @@ object Renderer {
         browsKind: String? = null, blush: Boolean = false
     ) {
         val ey = cy - 18; val e1 = cx - 4; val e2 = cx + 34
-        eye(e1, ey, eyes, look)
-        eye(e2, ey, eyes, look)
+        val ek = if (blink && (eyes == "open" || eyes == "half")) "closed" else eyes
+        eye(e1, ey, ek, look)
+        eye(e2, ey, ek, look)
         brows(e1, e2, ey, browsKind)
         if (blush) { oval(e1 - 14, cy + 10, 12, 7, PINK); oval(e2 + 14, cy + 10, 12, 7, PINK) }
         mouth(cx + 15, cy + 22, mouthKind)
@@ -256,17 +273,22 @@ object Renderer {
             cloud(x + 60, y + 18, 0.9, cc)
             for (i in 0 until 12) {
                 val rx = x + 8 + (i * 37) % (ww - 14)
-                val ry = y + 40 + (i * 23) % (hh - 52)
+                val ry = y + 40 + (i * 23 + t01 * (hh - 52)) % (hh - 52) // капли падают
                 line(rx, ry, rx - 4, ry + 10, RAIN, 2.5)
             }
-            if (kind == "storm") {
+            if (kind == "storm" && (frames == 1 || frame == 1 || frame == 2)) { // молния вспыхивает
+                if (frames > 1 && frame == 1) rect(x, y, ww, hh, withAlpha(SUN, 0.25))
                 strokeP(Pth().apply {
                     m(x + 62, y + 30); l(x + 52, y + 54); l(x + 62, y + 54); l(x + 50, y + 82)
                 }, SUN, 4)
             }
         }
         if (kind == "snow") {
-            for (i in 0 until 16) circle(x + 6 + (i * 41) % (ww - 10), y + 6 + (i * 29) % (hh - 16), 2.6 + (i % 3) * 0.6, SNOW)
+            for (i in 0 until 16) {
+                val sx = x + 6 + (i * 41) % (ww - 10) + 2 * sin(ph + i)              // снежинки покачиваются
+                val sy = y + 6 + (i * 29 + t01 * (hh - 16)) % (hh - 16)            // и падают
+                circle(sx, sy, 2.6 + (i % 3) * 0.6, SNOW)
+            }
         }
         if (kind == "fog") for (i in 0 until 4) rect(x, y + 14 + i * 22, ww, 10, FOG)
 
@@ -295,7 +317,7 @@ object Renderer {
         line(x, 0, x, 50 - up, CORD, 3)
         rect(x - 9, 46 - up, 18, 14, SOCKET)
         if (on) {
-            listOf(70, 54, 40, 28).forEach { r -> circle(x, 74 - up, r, GLOW) }
+            listOf(70, 54, 40, 28).forEach { r -> circle(x, 74 - up, r * (1 + 0.03 * sin(ph)), GLOW) }
             circle(x, 74 - up, 16, BULB_ON)
             circle(x - 5, 69 - up, 4, WHITE)
         } else {
@@ -304,19 +326,34 @@ object Renderer {
     }
 
     private fun candle(x: Double, y: Double) {
-        listOf(36, 26, 18).forEach { r -> circle(x, y - 34, r, GLOW) }
+        val fl = 1 + 0.18 * sin(ph * 2) + 0.08 * sin(ph * 5)   // пламя дрожит
+        val sway = 1.5 * sin(ph * 3)
+        listOf(36, 26, 18).forEach { r -> circle(x, y - 34, r * fl, GLOW) }
         rect(x - 9, y - 22, 18, 40, CANDLE)
         line(x, y - 22, x, y - 28, BLACK, 2)
-        oval(x, y - 36, 6, 10, ORANGE)
-        oval(x, y - 33, 3, 5, BULB_ON)
+        oval(x + sway, y - 36 - (fl - 1) * 6, 6, 10 * fl, ORANGE)
+        oval(x + sway * 0.6, y - 33, 3, 5 * fl, BULB_ON)
     }
 
     // ---------- вся сцена ----------
     @Synchronized
-    fun draw(mood: String, note: String, now: Long, weather: WeatherNow?, fedAt: Long): Bitmap {
-        val bmp = Bitmap.createBitmap((W * SCALE).toInt(), (H * SCALE).toInt(), Bitmap.Config.ARGB_8888)
+    fun draw(
+        mood: String, note: String, now: Long, weather: WeatherNow?, fedAt: Long,
+        frameIndex: Int = 0, frameCount: Int = 1, scale: Float = 2f
+    ): Bitmap {
+        frame = frameIndex; frames = frameCount.coerceAtLeast(1)
+        ph = 2 * PI * frame / frames
+        val anim = frames > 1
+        blink = anim && frame == frames - 2
+        bob = if (!anim) 0.0 else when (mood) {
+            "sleep" -> 3 * sin(ph)            // глубоко дышит во сне
+            "happy" -> -6 * abs(sin(ph))      // подпрыгивает от радости
+            "dark" -> 0.0
+            else -> 2 * sin(ph)
+        }
+        val bmp = Bitmap.createBitmap((W * scale).toInt(), (H * scale).toInt(), Bitmap.Config.ARGB_8888)
         cv = Canvas(bmp)
-        cv.scale(SCALE, SCALE)
+        cv.scale(scale, scale)
         // скруглённые углы виджета
         cv.clipPath(Path().apply { addRoundRect(RectF(0f, 0f, W, H), 40f, 40f, Path.Direction.CW) })
 
@@ -331,7 +368,7 @@ object Renderer {
 
         windowView(weather, night)
 
-        val cx = 455.0; val cy = 182.0
+        val cx = 455.0; val cy = 182.0 + bob
         var headY = cy
         val wk = weather?.kind
         val r = Logic.rng((now / (Logic.REFRESH_MINUTES * 60_000L)) * 7 + 3)
@@ -340,8 +377,9 @@ object Renderer {
             "sleep" -> {
                 drawBody(cx, cy + 6, 0.12); headY = cy + 6
                 face(cx, cy + 10, "closed", "o")
-                text("z", 528, 128, 30, true, STATUS_C)
-                text("Z", 552, 82, 42, true, STATUS_C)
+                val dz = t01 * 16                                      // «Z z» плывут вверх
+                text("z", 528 + dz * 0.4, 128 - dz, 30, true, withAlpha(STATUS_C, 1 - t01 * 0.5))
+                text("Z", 552 + dz * 0.4, 82 - dz, 42, true, withAlpha(STATUS_C, 1 - t01 * 0.5))
             }
             "sleepy" -> {
                 drawBody(cx, cy, 0.05)
@@ -349,9 +387,15 @@ object Renderer {
             }
             "fish" -> {
                 iceHole(225.0, 236.0)
-                line(382, 200, 282, 70, ROD, 6)       // удочка
-                line(282, 70, 232, 232, LINE, 2)      // леска
-                circle(232, 231, 6, RED)              // поплавок
+                val tipY = 70 + 6 * sin(ph)                 // кончик удочки качается
+                val bobY = 231 + 2.5 * sin(ph + 1.2)        // поплавок качается на воде
+                if (anim) {                                  // круги по воде
+                    val rr = 8 + t01 * 30
+                    strokeOval(232, 237, rr, rr * 0.28, withAlpha(WATER2, 1 - t01), 2)
+                }
+                line(382, 200, 282, tipY, ROD, 6)       // удочка
+                line(282, tipY, 232, bobY + 1, LINE, 2) // леска
+                circle(232, bobY, 6, RED)               // поплавок
                 drawBody(cx, cy, 0.0)
                 line(378, 196, 398, 206, OUTLINE, 7)  // ручка
                 val m = if (r() < 0.5) "flat" else "wavy"
@@ -361,19 +405,21 @@ object Renderer {
             "eat" -> {
                 drawBody(cx, cy, 0.0)
                 food(cx + 78, cy + 30, 0.95)
-                face(cx, cy, "happy", "chew", blush = true)
+                face(cx, cy, "happy", if (anim && frame % 2 == 1) "o" else "chew", blush = true) // жуёт
                 circle(cx - 70, cy + 80, 4, ORANGE); circle(cx + 92, cy + 76, 3, ORANGE)
             }
             "happy" -> {
                 drawBody(cx, cy - 6, -0.05); headY = cy - 6
                 face(cx, cy - 6, "happy", "smile", blush = true)
-                heart(590.0, 92.0, 1.2, RED)
-                heart(545.0, 58.0, 0.7, RED)
+                val rise = t01 * 18                            // сердечки поднимаются
+                val rise2 = ((t01 + 0.5) % 1.0) * 18
+                heart(590.0, 92.0 - rise, 1.2, withAlpha(RED, 1 - t01 * 0.6))
+                heart(545.0, 58.0 - rise2 + 9, 0.7, withAlpha(RED, 1 - ((t01 + 0.5) % 1.0) * 0.6))
             }
             "hungry" -> {
                 drawBody(cx, cy + 4, 0.08); headY = cy + 4
                 face(cx, cy + 4, "open", "frown", Pt(-0.8, -0.7), "worried")
-                circle(352, 112, 7, STATUS_C); circle(328, 90, 11, STATUS_C)
+                circle(352, 112, 7 + 1.5 * sin(ph), STATUS_C); circle(328, 90, 11 + 1.5 * sin(ph + 1), STATUS_C)
                 oval(262, 80, 58, 40, STATUS_C)
                 food(262.0, 78.0, 0.9)
             }
@@ -382,8 +428,9 @@ object Renderer {
                 face(cx, cy, "open", "flat")
                 rect(0, 0, W, H, DARKNESS)
                 val lk = if (r() < 0.5) Pt(-1.0, 0.0) else Pt(1.0, -0.3)
-                eye(cx - 4, cy - 18, "open", lk) // в темноте видны только глаза
-                eye(cx + 34, cy - 18, "open", lk)
+                val ek = if (blink) "closed" else "open"  // моргнул — и глаза пропали в темноте
+                eye(cx - 4, cy - 18, ek, lk) // в темноте видны только глаза
+                eye(cx + 34, cy - 18, ek, lk)
                 candle(cx + 92, cy + 62)
             }
             else -> { // idle

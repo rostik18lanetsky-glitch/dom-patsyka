@@ -71,23 +71,40 @@ class PatsykWidget : AppWidgetProvider() {
             val now = System.currentTimeMillis()
             val weather = if (fetchWeather) Weather.get(s, now) else s.weather()
             val (mood, note) = Logic.pickMood(s, now)
-            val bmp = Renderer.draw(mood, note, now, weather, s.fedAt)
 
-            val views = RemoteViews(context.packageName, R.layout.widget)
-            views.setImageViewBitmap(R.id.img, bmp)
             val open = Intent(context, MenuActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            views.setOnClickPendingIntent(
-                R.id.root,
-                PendingIntent.getActivity(
-                    context, 0, open,
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-                )
+            val tap = PendingIntent.getActivity(
+                context, 0, open,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
 
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, PatsykWidget::class.java))
-            if (ids.isNotEmpty()) manager.updateAppWidget(ids, views)
+            if (ids.isEmpty()) return
+
+            // Пробуем полную анимацию; если телефону не хватит памяти на кадры — меньше кадров.
+            for ((count, scale) in QUALITY) {
+                try {
+                    val views = RemoteViews(context.packageName, R.layout.widget)
+                    views.removeAllViews(R.id.flipper)
+                    for (f in 0 until count) {
+                        val bmp = Renderer.draw(mood, note, now, weather, s.fedAt, f, count, scale)
+                        val fv = RemoteViews(context.packageName, R.layout.frame)
+                        fv.setImageViewBitmap(R.id.frame_img, bmp)
+                        views.addView(R.id.flipper, fv)
+                    }
+                    views.setOnClickPendingIntent(R.id.root, tap)
+                    views.setOnClickPendingIntent(R.id.flipper, tap)
+                    manager.updateAppWidget(ids, views)
+                    return
+                } catch (e: Exception) {
+                    // слишком много памяти — пробуем вариант попроще
+                }
+            }
         }
+
+        /** (кол-во кадров, масштаб): от красивого к простому */
+        private val QUALITY = listOf(10 to 1.2f, 8 to 1.0f, 4 to 1.0f, 1 to 2f)
     }
 }

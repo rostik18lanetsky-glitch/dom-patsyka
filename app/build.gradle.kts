@@ -11,8 +11,23 @@ android {
         applicationId = "com.patsyk.widget"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0"
+    }
+
+    // Постоянный ключ подписи — чтобы обновления ставились поверх старой версии
+    signingConfigs {
+        create("patsyk") {
+            storeFile = file("patsyk.keystore")
+            storePassword = "patsyk123"
+            keyAlias = "patsyk"
+            keyPassword = "patsyk123"
+        }
+    }
+    buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("patsyk")
+        }
     }
 
     compileOptions {

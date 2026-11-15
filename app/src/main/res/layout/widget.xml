@@ -4,10 +4,11 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <ImageView
-        android:id="@+id/img"
+    <!-- Кадры анимации: телефон сам листает их по кругу -->
+    <ViewFlipper
+        android:id="@+id/flipper"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:contentDescription="@string/app_name"
-        android:scaleType="fitCenter" />
+        android:autoStart="true"
+        android:flipInterval="200" />
 </FrameLayout>

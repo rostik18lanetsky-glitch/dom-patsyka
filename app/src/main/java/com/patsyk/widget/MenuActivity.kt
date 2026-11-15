@@ -3,16 +3,16 @@ package com.patsyk.widget
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 
 /**
- * Меню по нажатию на виджет: покормить, погладить, рыбалка, спать, свет.
- * Здесь же спрашиваем доступ к геолокации и запоминаем координаты для погоды.
+ * Открывается только из меню приложений: спрашивает геолокацию (для погоды) и закрывается.
+ * Сам Пацык живёт на виджете полностью самостоятельно.
  */
 class MenuActivity : Activity() {
 
@@ -22,14 +22,21 @@ class MenuActivity : Activity() {
             requestPermissions(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION), 1)
         } else {
             updateLocation()
-            showMenu()
+            done()
         }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) updateLocation()
-        showMenu()
+        done()
+    }
+
+    private fun done() {
+        Toast.makeText(this, "Пацык живёт сам — добавь виджет «Дом Пацыка» на рабочий стол", Toast.LENGTH_LONG).show()
+        val app = applicationContext
+        Thread { PatsykWidget.refresh(app, true) }.start()
+        finish()
     }
 
     @SuppressLint("MissingPermission")
@@ -44,7 +51,6 @@ class MenuActivity : Activity() {
             }
             best?.let { saveLoc(state, it) }
 
-            // свежая точка (Android 11+), придёт чуть позже
             if (Build.VERSION.SDK_INT >= 30 && lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
                 val app = applicationContext
                 lm.getCurrentLocation(LocationManager.NETWORK_PROVIDER, null, mainExecutor) { loc ->
@@ -60,50 +66,8 @@ class MenuActivity : Activity() {
     }
 
     private fun saveLoc(state: State, loc: Location) {
-        // меняем координаты только если сдвинулись заметно (~3 км), чтобы не сбрасывать кэш погоды
         if (!state.hasLoc || Math.abs(state.lat - loc.latitude) > 0.03 || Math.abs(state.lon - loc.longitude) > 0.03) {
             state.setLoc(loc.latitude, loc.longitude)
         }
-    }
-
-    private fun showMenu() {
-        val s = State(this)
-        val now = System.currentTimeMillis()
-        val darkNow = Logic.pickMood(s, now).mood == "dark"
-        val items = arrayOf(
-            "🧀 Покормить",
-            "🤚 Погладить",
-            "🎣 Отправить на рыбалку",
-            "🌙 Уложить спать",
-            if (darkNow) "💡 Включить свет" else "💡 Выключить свет",
-        )
-        val acts = arrayOf("eat", "happy", "fish", "sleep")
-
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle(if (s.fishCount > 0) "Пацык · поймано рыб: ${s.fishCount}" else "Пацык")
-            .setItems(items) { _, i ->
-                if (i < acts.size && acts[i] == "fish") {
-                    s.fishUntil = now + 5 * 60_000L   // рыбачит 5 минут — жми на прорубь!
-                    s.action = null
-                } else if (i < acts.size) {
-                    s.action = acts[i]
-                    s.actionAt = now
-                    s.fishUntil = 0L
-                    if (acts[i] == "eat") s.fedAt = now
-                } else {
-                    s.lightOff = !darkNow
-                    s.lightAt = now
-                    s.action = null
-                }
-                val app = applicationContext
-                Thread { PatsykWidget.refresh(app, true) }.start()
-            }
-            .setNegativeButton("Закрыть", null)
-            .setOnDismissListener { finish() }
-            .show()
-
-        // заодно обновим виджет (вдруг погода/координаты поменялись)
-        val app = applicationContext
-        Thread { PatsykWidget.refresh(app, true) }.start()
     }
 }

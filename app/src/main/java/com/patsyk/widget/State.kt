@@ -50,6 +50,23 @@ class State(ctx: Context) {
         get() = p.getLong("missAt", 0L)
         set(v) = p.edit().putLong("missAt", v).apply()
 
+    // текущий «эпизод» жизни Пацыка
+    var epType: String?
+        get() = p.getString("epType", null)
+        set(v) = p.edit().putString("epType", v).apply()
+
+    var epPrev: String?
+        get() = p.getString("epPrev", null)
+        set(v) = p.edit().putString("epPrev", v).apply()
+
+    var epStart: Long
+        get() = p.getLong("epStart", 0L)
+        set(v) = p.edit().putLong("epStart", v).apply()
+
+    var epFishCounted: Boolean
+        get() = p.getBoolean("epFishCounted", false)
+        set(v) = p.edit().putBoolean("epFishCounted", v).apply()
+
     // координаты (последние известные)
     val hasLoc: Boolean get() = p.contains("lat")
     val lat: Double get() = p.getFloat("lat", 50.45f).toDouble()

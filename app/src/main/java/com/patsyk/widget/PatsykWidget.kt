@@ -7,52 +7,42 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.widget.RemoteViews
 
-/** Виджет на рабочем столе. Обновляется раз в минуту и сразу после нажатий. */
+/**
+ * Виджет на рабочем столе. Пацык живёт сам: виджет перерисовывается
+ * в момент, когда заканчивается очередной шаг (обычно каждые 15 секунд).
+ */
 class PatsykWidget : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
-        schedule(context)
-        refreshAsync(context, true)
+        refreshAsync(context)
     }
 
     override fun onEnabled(context: Context) {
-        schedule(context)
+        refreshAsync(context)
     }
 
     override fun onDisabled(context: Context) {
-        val am = context.getSystemService(AlarmManager::class.java)
-        am?.cancel(tickIntent(context))
+        val am = context.getSystemService(AlarmManager::class.java) ?: return
+        am.cancel(tickIntent(context))
+        am.cancel(safetyIntent(context))
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         when (intent.action) {
-            ACTION_TICK -> refreshAsync(context, true)
-            ACTION_HOOK -> {
-                // нажали на прорубь — пробуем подсечь
-                val app = context.applicationContext
-                val pending = goAsync()
-                Thread {
-                    try {
-                        Logic.hook(State(app), System.currentTimeMillis())
-                        refresh(app, false)
-                    } catch (e: Exception) {
-                    } finally {
-                        pending.finish()
-                    }
-                }.start()
-            }
+            ACTION_TICK, Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> refreshAsync(context)
         }
     }
 
-    private fun refreshAsync(context: Context, fetchWeather: Boolean) {
+    private fun refreshAsync(context: Context) {
         val pending = goAsync()
         val app = context.applicationContext
         Thread {
             try {
-                refresh(app, fetchWeather)
+                refresh(app, true)
             } catch (e: Exception) {
                 // не роняем виджет
             } finally {
@@ -63,7 +53,6 @@ class PatsykWidget : AppWidgetProvider() {
 
     companion object {
         const val ACTION_TICK = "com.patsyk.widget.TICK"
-        const val ACTION_HOOK = "com.patsyk.widget.HOOK"
 
         private fun tickIntent(context: Context): PendingIntent =
             PendingIntent.getBroadcast(
@@ -72,51 +61,50 @@ class PatsykWidget : AppWidgetProvider() {
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
 
-        private fun hookIntent(context: Context): PendingIntent =
+        private fun safetyIntent(context: Context): PendingIntent =
             PendingIntent.getBroadcast(
-                context, 2,
-                Intent(context, PatsykWidget::class.java).setAction(ACTION_HOOK),
+                context, 3,
+                Intent(context, PatsykWidget::class.java).setAction(ACTION_TICK),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
 
-        /** Раз в минуту (RTC без пробуждения: при выключенном экране ждёт, батарею не тратит) */
-        fun schedule(context: Context) {
+        /**
+         * Следующее обновление — точно к концу текущего шага.
+         * RTC без пробуждения: при выключенном экране ждёт и батарею не тратит.
+         */
+        private fun scheduleNext(context: Context, at: Long) {
             val am = context.getSystemService(AlarmManager::class.java) ?: return
-            am.setRepeating(
+            val t = maxOf(at, System.currentTimeMillis() + 3_000L)
+            val pi = tickIntent(context)
+            try {
+                if (Build.VERSION.SDK_INT >= 31 && !am.canScheduleExactAlarms()) am.set(AlarmManager.RTC, t, pi)
+                else am.setExact(AlarmManager.RTC, t, pi)
+            } catch (e: SecurityException) {
+                am.set(AlarmManager.RTC, t, pi)
+            }
+            // страховка: если цепочка вдруг оборвётся — раз в 15 минут перезапускаем
+            am.setInexactRepeating(
                 AlarmManager.RTC,
-                System.currentTimeMillis() + 60_000L,
-                60_000L,
-                tickIntent(context)
+                System.currentTimeMillis() + AlarmManager.INTERVAL_FIFTEEN_MINUTES,
+                AlarmManager.INTERVAL_FIFTEEN_MINUTES,
+                safetyIntent(context)
             )
         }
 
-        /** Перерисовать виджет. fetchWeather=true — можно сходить в интернет (не в главном потоке!) */
+        /** Перерисовать виджет (не в главном потоке — может сходить за погодой) */
         @Synchronized
         fun refresh(context: Context, fetchWeather: Boolean) {
             val s = State(context)
             val now = System.currentTimeMillis()
             val weather = if (fetchWeather) Weather.get(s, now) else s.weather()
-
-            var m = Logic.pickMood(s, now)
-            // рыбачит сам — иногда ловит без тебя
-            if (m.mood == "fish" && Logic.autoCatch(s, now)) {
-                Logic.startCatch(s, now)
-                m = Logic.pickMood(s, now)
-            }
-
-            val open = Intent(context, MenuActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            val tap = PendingIntent.getActivity(
-                context, 0, open,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
-            val left = if (m.mood == "fish") hookIntent(context) else tap
+            val (m, stepEnd) = Logic.current(s, now)
 
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, PatsykWidget::class.java))
             if (ids.isEmpty()) return
+            scheduleNext(context, stepEnd)
 
-            // Пробуем полную анимацию; если телефону не хватит памяти на кадры — меньше кадров.
+            // Полная анимация; если телефону не хватит памяти на кадры — меньше кадров.
             for ((count, scale) in QUALITY) {
                 try {
                     val views = RemoteViews(context.packageName, R.layout.widget)
@@ -130,9 +118,6 @@ class PatsykWidget : AppWidgetProvider() {
                         fv.setImageViewBitmap(R.id.frame_img, bmp)
                         views.addView(R.id.flipper, fv)
                     }
-                    views.setOnClickPendingIntent(R.id.root, tap)
-                    views.setOnClickPendingIntent(R.id.zone_right, tap)
-                    views.setOnClickPendingIntent(R.id.zone_left, left)
                     manager.updateAppWidget(ids, views)
                     return
                 } catch (e: Exception) {

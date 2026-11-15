@@ -74,6 +74,7 @@ object Renderer {
     private val STRAW = col("#ff6f91")
     private val DRY = col("#121214")
     private val CRACK = col("#2c2c30")
+    private val PULL = col("#9a9aa0")
     private val DARKNESS = col("#000000", 0.86)
 
     private lateinit var cv: Canvas
@@ -348,8 +349,14 @@ object Renderer {
         circle(x + 52, top - 4, 11, HAT_BAND)
     }
 
-    private fun lamp(x: Double, on: Boolean, up: Double) {
+    /** Конец шнурка-выключателя (куда тянется Пацык) */
+    private fun knobX(x: Double) = x + 82
+    private fun knobY(up: Double, pull: Double) = 126 - up * 0.3 + pull
+
+    private fun lamp(x: Double, on: Boolean, up: Double, pull: Double = 0.0) {
         line(x, 0, x, 50 - up, CORD, 3)
+        line(x + 8, 56 - up, knobX(x), knobY(up, pull), PULL, 2)   // шнурок-выключатель
+        circle(knobX(x), knobY(up, pull) + 4, 4.5, PULL)
         rect(x - 9, 46 - up, 18, 14, SOCKET)
         if (on) {
             listOf(70, 54, 40, 28).forEach { r -> circle(x, 74 - up, r * (1 + 0.03 * sin(ph)), GLOW) }
@@ -407,7 +414,8 @@ object Renderer {
         val cx = 455.0; val cy = 182.0 + bob
         var headY = cy
         val wk = weather?.kind
-        val r = Logic.rng((now / (Logic.REFRESH_MINUTES * 60_000L)) * 7 + 3)
+        val r = Logic.rng((now / (Logic.STEP_SEC * 1000L)) * 7 + 3)
+        var reach = false
 
         when (mood) {
             "sleep" -> {
@@ -511,6 +519,12 @@ object Renderer {
                 for (i in 0 until 4) line(326 + i * 8, 247, 326 + i * 8, 261, WHITE, 2)
                 fillP(Pth().apply { m(358, 254); l(370, 246); l(370, 262); close() }, WHITE)
             }
+            "lampreach" -> { // тянется к шнурку лампочки
+                reach = true
+                val st = -0.14 - 0.06 * abs(sin(ph))
+                drawBody(cx, cy, st); headY = cy - 76 * (-st)
+                face(cx, cy - 6, "open", "o", Pt(0.9, -0.8), "up")
+            }
             "dark" -> {
                 drawBody(cx, cy, 0.0)
                 face(cx, cy, "open", "flat")
@@ -539,7 +553,16 @@ object Renderer {
 
         val cold = weather != null && weather.t <= 0 && mood != "dark"
         if (cold) hat(cx + 6, headY - 86)
-        lamp(455.0, !(mood == "sleep" || mood == "dark"), if (cold) 30.0 else 0.0)
+        val up = if (cold) 30.0 else 0.0
+        val pull = if (reach) 9 * abs(sin(ph)) else 0.0
+        lamp(455.0, !(mood == "sleep" || mood == "dark"), up, pull)
+        if (reach) { // лапка тянется к шнурку
+            val hx = knobX(455.0); val hy = knobY(up, pull) + 6
+            val sx = cx + 58; val sy = cy - 22
+            line(sx, sy, hx, hy, OUTLINE, 17)
+            line(sx, sy, hx, hy, BODY, 12)
+            circle(hx, hy, 9, OUTLINE); circle(hx, hy, 7, BODY)
+        }
 
         // подписи
         text("Дом Пацыка", 34, 24, 26, true, TITLE)
@@ -547,18 +570,16 @@ object Renderer {
         if (mood == "idle" && wk == "storm") status = "боится грозы"
         if (mood == "idle" && wk == "rain") status = "слушает дождь"
         if (mood == "idle" && wk == "snow") status = "смотрит на снег"
-        if (mood == "fish" && note == "miss") text("сорвалась! жми ещё раз", 34, 274, 24, false, STATUS_C)
-        else text((if (mood == "dark") "" else note) + status, 34, 274, 24, false, STATUS_C)
-
-        // «сытость» — оранжевые кубики справа внизу
-        val hrs = (now - fedAt) / 3_600_000.0
-        val full = ceil(3 - (hrs / Logic.HUNGRY_AFTER_HOURS) * 3).toInt().coerceIn(0, 3)
-        for (i in 0 until 3) rect(588 + i * 22, 282, 14, 14, if (i < full) ORANGE else EMPTY)
+        when {
+            mood == "fish" && note == "miss" -> text("сорвалась, ничего не поймал", 34, 274, 24, false, STATUS_C)
+            mood == "dark" && note == "off" -> text("щёлк! выключил свет", 34, 274, 24, false, STATUS_C)
+            else -> text((if (mood == "dark") "" else note) + status, 34, 274, 24, false, STATUS_C)
+        }
 
         // счётчик пойманных рыб
         if (fishCount > 0) {
-            fish(512.0, 289.0, 0.5)
-            text("×$fishCount", 528, 276, 20, false, STATUS_C)
+            fish(590.0, 289.0, 0.5)
+            text("×$fishCount", 606, 276, 20, false, STATUS_C)
         }
 
         return bmp

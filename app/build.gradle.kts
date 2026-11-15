@@ -11,8 +11,8 @@ android {
         applicationId = "com.patsyk.widget"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "4.0"
+        versionCode = 7
+        versionName = "5.0"
     }
 
     // Постоянный ключ подписи — чтобы обновления ставились поверх старой версии

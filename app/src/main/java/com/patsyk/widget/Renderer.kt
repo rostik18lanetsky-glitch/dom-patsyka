@@ -75,6 +75,26 @@ object Renderer {
     private val DRY = col("#121214")
     private val CRACK = col("#2c2c30")
     private val PULL = col("#9a9aa0")
+    private val NOTE = col("#c9a7ff")
+    private val BOOK = col("#8b5a3c")
+    private val PAGE = col("#f3eee3")
+    private val INK = col("#9a958c")
+    private val CUP = col("#f4f4f4")
+    private val TEA = col("#a0612b")
+    private val CANVAS_C = col("#fafafa")
+    private val POT = col("#c96b3c")
+    private val LEAF = col("#58b368")
+    private val PETAL = col("#ff8fb1")
+    private val DUMB = col("#3b3b40")
+    private val PLATE = col("#6c6c74")
+    private val BUBBLE = col("#bfe6ff", 0.9)
+    private val BLUE = col("#4aa3ff")
+    private val GUITAR = col("#e08a3c")
+    private val GUITAR_DK = col("#8a4b1d")
+    private val PHONE = col("#222226")
+    private val SCREEN = col("#6fd3ff")
+    private val HEADPH = col("#e5484d")
+    private val AURA = col("#b9a2ff", 0.12)
     private val DARKNESS = col("#000000", 0.86)
 
     private lateinit var cv: Canvas
@@ -269,6 +289,19 @@ object Renderer {
         circle(x - 11.4 * s, y - 2.8 * s, 0.9 * s, WHITE)
         line(x - 3 * s, y - 5 * s, x - 3 * s, y + 5 * s, FISH_DK, 1.4 * s)        // жабры
         cv.restore()
+    }
+
+    /** Лапка: от тела (sx, sy) к кисти (ex, ey) */
+    private fun arm(sx: Double, sy: Double, ex: Double, ey: Double) {
+        line(sx, sy, ex, ey, OUTLINE, 16); line(sx, sy, ex, ey, BODY, 11)
+        circle(ex, ey, 8.5, OUTLINE); circle(ex, ey, 6.5, BODY)
+    }
+
+    /** Нотка ♪ */
+    private fun note(x: Double, y: Double, sc: Double, color: Int) {
+        oval(x, y, 6 * sc, 4.6 * sc, color)
+        line(x + 5.4 * sc, y, x + 5.4 * sc, y - 20 * sc, color, 2.2 * sc)
+        line(x + 5.4 * sc, y - 20 * sc, x + 12 * sc, y - 14 * sc, color, 2.2 * sc)
     }
 
     /** Точка на квадратичной кривой (для соломинки) */
@@ -519,6 +552,186 @@ object Renderer {
                 for (i in 0 until 4) line(326 + i * 8, 247, 326 + i * 8, 261, WHITE, 2)
                 fillP(Pth().apply { m(358, 254); l(370, 246); l(370, 262); close() }, WHITE)
             }
+            "read" -> { // читает книжку — глаза бегают по строчкам
+                drawBody(cx, cy, 0.0)
+                face(cx, cy, "open", "flat", Pt(0.7 * sin(ph * 2), 0.8))
+                val bx = cx + 14; val by = cy + 44
+                fillP(Pth().apply { m(bx - 62, by - 24); l(bx, by - 18); l(bx, by + 26); l(bx - 62, by + 20); close() }, PAGE)
+                fillP(Pth().apply { m(bx + 62, by - 24); l(bx, by - 18); l(bx, by + 26); l(bx + 62, by + 20); close() }, PAGE)
+                strokeP(Pth().apply { m(bx - 62, by - 24); l(bx, by - 18); l(bx + 62, by - 24); l(bx + 62, by + 20); l(bx, by + 26); l(bx - 62, by + 20); close() }, BOOK, 4)
+                line(bx, by - 18, bx, by + 26, BOOK, 3)
+                for (k in 0 until 4) {
+                    line(bx - 54, by - 12 + k * 8, bx - 8, by - 8 + k * 8, INK, 2)
+                    line(bx + 8, by - 8 + k * 8, bx + 54, by - 12 + k * 8, INK, 2)
+                }
+                arm(cx - 60, cy + 20, bx - 62, by + 6); arm(cx + 86, cy + 20, bx + 62, by + 6)
+            }
+            "music" -> { // слушает музыку в наушниках и качает головой
+                val b = 3 * sin(ph * 2)
+                drawBody(cx, cy + b, 0.03 * sin(ph * 2)); headY = cy + b
+                face(cx, cy + b, "happy", "smile", blush = true)
+                strokeP(Pth().apply { m(cx - 76, cy + b - 24); c(cx + 88, cy + b - 24, cx - 70, cy + b - 128, cx + 82, cy + b - 128) }, CORD, 7)
+                oval(cx - 80, cy + b - 20, 12, 20, HEADPH); oval(cx + 92, cy + b - 20, 12, 20, HEADPH)
+                for (i in 0 until 3) {
+                    val u = (t01 + i / 3.0) % 1.0
+                    note(cx + 116 + i * 14 + 10 * sin(u * 6), cy - 20 - u * 110, 1.0, withAlpha(NOTE, 1 - u))
+                }
+            }
+            "dance" -> { // танцует
+                val hop = 6 * abs(sin(ph * 2))
+                cv.save(); cv.rotate((12 * sin(ph)).toFloat(), cx.toFloat(), (cy + 76).toFloat())
+                drawBody(cx, cy - hop, -0.04)
+                face(cx, cy - hop, "happy", "smile", blush = true)
+                arm(cx - 66, cy - 10 - hop, cx - 120, cy - 72 + 16 * sin(ph * 2))
+                arm(cx + 80, cy - 10 - hop, cx + 134, cy - 72 - 16 * sin(ph * 2))
+                cv.restore()
+                for (i in 0 until 2) {
+                    val u = (t01 + i / 2.0) % 1.0
+                    note(cx - 150 - u * 30, cy - 10 - u * 90, 1.1, withAlpha(NOTE, 1 - u))
+                    note(cx + 150 + u * 30, cy - 20 - u * 90, 1.0, withAlpha(PETAL, 1 - u))
+                }
+            }
+            "tea" -> { // пьёт чай
+                drawBody(cx, cy, 0.0)
+                face(cx, cy, "happy", "smile", blush = true)
+                val ux = cx + 100; val uy = cy + 26
+                strokeOval(ux + 24, uy - 2, 8, 10, CUP, 4)
+                fillP(Pth().apply { m(ux - 20, uy - 20); l(ux + 20, uy - 20); l(ux + 16, uy + 18); l(ux - 16, uy + 18); close() }, CUP)
+                oval(ux, uy - 20, 20, 5, TEA)
+                arm(cx + 70, cy + 30, ux - 14, uy + 6)
+                for (i in 0 until 3) {                                   // пар
+                    val u = (t01 + i / 3.0) % 1.0
+                    val sx = ux - 8 + i * 8
+                    strokeP(Pth().apply { m(sx, uy - 28 - u * 30); q(sx, uy - 50 - u * 30, sx + 7 * sin(ph + i), uy - 39 - u * 30) }, withAlpha(WHITE, 0.6 * (1 - u)), 2.5)
+                }
+            }
+            "paint" -> { // рисует картину на мольберте
+                val done = progress >= 1.0
+                val ex0 = 300.0
+                line(ex0 - 40, 255, ex0 - 10, 120, ROD, 5); line(ex0 + 40, 255, ex0 + 10, 120, ROD, 5); line(ex0, 255, ex0, 130, ROD, 4)
+                rect(ex0 - 55, 89, 110, 94, ROD); rect(ex0 - 52, 92, 104, 88, CANVAS_C)
+                val total = 6
+                val shown = if (done) total else (1 + frame * total / frames).coerceAtMost(total)
+                if (shown >= 1) rect(ex0 - 50, 94, 100, 46, SKY_DAY)
+                if (shown >= 2) circle(ex0 + 30, 110, 9, SUN)
+                if (shown >= 3) fillP(Pth().apply { m(ex0 - 50, 178); q(ex0 + 50, 178, ex0, 128); close() }, LEAF)
+                if (shown >= 4) rect(ex0 - 30, 146, 26, 24, ORANGE)
+                if (shown >= 5) fillP(Pth().apply { m(ex0 - 34, 146); l(ex0, 146); l(ex0 - 17, 130); close() }, RED)
+                if (shown >= 6) { line(ex0 + 30, 172, ex0 + 30, 156, ROD, 3); circle(ex0 + 30, 151, 9, LEAF) }
+                drawBody(cx, cy, 0.0)
+                face(cx, cy, if (done) "happy" else "open", if (done) "smile" else "flat", Pt(-1.0, -0.3), blush = done)
+                if (!done) {                                              // кисточка
+                    val tx = ex0 + 28 + 10 * sin(ph * 2); val ty = 150 + 10 * sin(ph * 2 + 1.5)
+                    arm(cx - 70, cy + 10, tx + 20, ty + 16)
+                    line(tx + 20, ty + 16, tx, ty, ROD, 4); circle(tx, ty, 4, PETAL)
+                } else arm(cx - 70, cy + 10, cx - 110, cy - 40)
+            }
+            "exercise" -> { // качается с гантелей
+                val lift = abs(sin(ph))
+                drawBody(cx, cy, 0.04 * lift)
+                face(cx, cy, "open", if (lift > 0.6) "wavy" else "flat", Pt(0.6, -0.4), "worried")
+                val hx = cx + 118; val hy = cy + 30 - 80 * lift
+                arm(cx + 76, cy + 10, hx, hy)
+                line(hx - 26, hy, hx + 26, hy, DUMB, 6)
+                rect(hx - 34, hy - 14, 10, 28, PLATE); rect(hx + 24, hy - 14, 10, 28, PLATE)
+                if (lift > 0.4) oval(cx - 48, cy - 66 + t01 * 24, 4, 6, withAlpha(RAIN, 1 - t01))  // пот
+            }
+            "meditate" -> { // медитирует и парит
+                val lev = -14 + 6 * sin(ph)
+                listOf(112, 96, 80).forEach { circle(cx + 6, cy + lev, it * (1 + 0.04 * sin(ph)), AURA) }
+                drawBody(cx, cy + lev, 0.0); headY = cy + lev
+                face(cx, cy + lev, "closed", "smile")
+                arm(cx - 66, cy + lev + 30, cx - 98, cy + lev + 52); arm(cx + 80, cy + lev + 30, cx + 112, cy + lev + 52)
+            }
+            "bubbles" -> { // пускает мыльные пузыри
+                drawBody(cx, cy, 0.0)
+                face(cx, cy, "open", "o", Pt(-1.0, -0.6), "up")
+                val wx = cx - 112; val wy = cy - 10
+                arm(cx - 66, cy + 16, wx + 6, wy + 40)
+                line(wx + 6, wy + 40, wx, wy + 10, ROD, 3); strokeCircle(wx, wy, 10, BUBBLE, 3)
+                for (i in 0 until 5) {
+                    val u = (t01 + i / 5.0) % 1.0
+                    val bx = wx - 20 - u * 150 + 12 * sin(ph * 2 + i); val by = wy - u * 90 + 8 * sin(ph + i)
+                    val rr = 6 + (i % 3) * 4 + u * 4
+                    strokeCircle(bx, by, rr, withAlpha(BUBBLE, 1 - u * 0.7), 2.5)
+                    circle(bx - rr * 0.35, by - rr * 0.35, rr * 0.2, withAlpha(WHITE, 0.8 * (1 - u)))
+                }
+            }
+            "juggle" -> { // жонглирует
+                drawBody(cx, cy, 0.0)
+                face(cx, cy, "open", "o", Pt(0.8 * sin(ph), -0.9), "up")
+                val lx = cx - 58; val rx = cx + 90; val hy = cy + 6
+                arm(cx - 50, cy + 30, lx, hy); arm(cx + 80, cy + 30, rx, hy)
+                val balls = listOf(RED, ORANGE, BLUE)
+                for (i in 0 until 3) {
+                    val u = (t01 + i / 3.0) % 1.0
+                    val bx = lx + (rx - lx) * u; val by = hy - 150 * sin(PI * u)
+                    circle(bx, by, 10, balls[i]); circle(bx - 3, by - 3, 3, withAlpha(WHITE, 0.7))
+                }
+            }
+            "plant" -> { // поливает цветок, и тот вырастает
+                val done = progress >= 1.0
+                val px = 320.0
+                val h = if (done) 84.0 else 24.0
+                line(px, 222, px, 222 - h, LEAF, 4)
+                oval(px - 10, 222 - h * 0.45, 10, 5, LEAF); oval(px + 10, 222 - h * 0.6, 10, 5, LEAF)
+                if (done) {
+                    for (k in 0 until 6) circle(px + 13 * sin(k * PI / 3 + ph * 0.2), 222 - h + 13 * sin(k * PI / 3 + PI / 2 + ph * 0.2), 8, PETAL)
+                    circle(px, 222 - h, 7, SUN)
+                } else circle(px, 222 - h, 5, LEAF)
+                fillP(Pth().apply { m(px - 26, 226); l(px + 26, 226); l(px + 20, 258); l(px - 20, 258); close() }, POT)
+                rect(px - 30, 220, 60, 9, ORANGE2)
+                drawBody(cx, cy, 0.0)
+                if (!done) {
+                    face(cx, cy, "open", "flat", Pt(-1.0, 0.6))
+                    rect(px + 66, 140, 40, 30, BLUE)                       // лейка
+                    line(px + 68, 152, px + 30, 174, BLUE, 5)
+                    strokeOval(px + 86, 138, 14, 10, BLUE, 4)
+                    arm(cx - 70, cy - 5, px + 104, 160.0)
+                    for (i in 0 until 3) { val u = (t01 + i / 3.0) % 1.0; circle(px + 26 - 8 * u, 180 + u * 36, 3, WATER2) }
+                } else face(cx, cy, "happy", "smile", blush = true)
+            }
+            "sneeze" -> { // собирается чихнуть… апчхи!
+                if (progress < 1.0) {
+                    drawBody(cx, cy - 6, -0.08 - 0.03 * sin(ph * 3)); headY = cy - 6
+                    face(cx, cy - 6, "half", "o", Pt(0.0, -1.0), "up")
+                } else {
+                    drawBody(cx, cy + 6, 0.15); headY = cy + 6
+                    face(cx, cy + 6, "closed", "o", browsKind = "worried")
+                    for (i in 0 until 8) {
+                        val a = -0.6 + i * 0.17; val d = 30 + t01 * 70 + (i % 3) * 8
+                        circle(cx + 30 + d * kotlin.math.cos(a), cy + 34 + d * sin(a), 3.0, withAlpha(RAIN, 1 - t01))
+                    }
+                    line(cx - 100, cy - 40, cx - 120, cy - 50, STATUS_C, 3); line(cx - 104, cy - 20, cx - 128, cy - 22, STATUS_C, 3)
+                }
+            }
+            "guitar" -> { // играет на гитаре
+                drawBody(cx, cy, 0.02 * sin(ph * 2))
+                face(cx, cy, "happy", if (frame % 2 == 0) "o" else "smile", blush = true)
+                line(cx - 50, cy + 36, cx - 140, cy - 20, GUITAR_DK, 9)               // гриф
+                rect(cx - 152, cy - 32, 18, 16, GUITAR_DK)
+                circle(cx - 44, cy + 40, 22, GUITAR); circle(cx - 10, cy + 54, 30, GUITAR)
+                circle(cx - 24, cy + 46, 8, GUITAR_DK)
+                for (k in 0 until 3) line(cx - 10 + k * 2, cy + 52 + k * 2, cx - 140 + k * 2, cy - 22 + k * 2, withAlpha(WHITE, 0.5), 1)
+                arm(cx - 60, cy + 10, cx - 116, cy - 6)
+                arm(cx + 60, cy + 30, cx - 4 + 6 * sin(ph * 4), cy + 50)
+                for (i in 0 until 3) { val u = (t01 + i / 3.0) % 1.0; note(cx - 170 - u * 20, cy - 40 - u * 90, 1.0, withAlpha(NOTE, 1 - u)) }
+            }
+            "phone" -> { // сидит в телефоне
+                drawBody(cx, cy, 0.0)
+                circle(cx + 15, cy - 10, 62, withAlpha(SCREEN, 0.10))
+                face(cx, cy, "open", "flat", Pt(0.2, 1.0))
+                rect(cx - 6, cy + 30, 40, 62, PHONE); rect(cx - 2, cy + 35, 32, 50, SCREEN)
+                for (k in 0 until 4) { val y = cy + 38 + ((k * 12 + frame * 4) % 44); rect(cx + 1, y, 26, 4, withAlpha(WHITE, 0.7)) }
+                arm(cx - 60, cy + 40, cx - 6, cy + 70); arm(cx + 80, cy + 40, cx + 34, cy + 70)
+            }
+            "ball" -> { // играет с мячиком
+                val bxp = 300 + 30 * sin(ph); val byp = 236 - 100 * abs(sin(ph * 2))
+                oval(bxp, 254, 16 * (1 - 0.4 * (236 - byp) / 100), 4, SHADOW)
+                circle(bxp, byp, 16, RED); line(bxp - 16, byp, bxp + 16, byp, WHITE, 3)
+                drawBody(cx, cy, 0.0)
+                face(cx, cy, "open", "o", Pt(-1.0, ((byp - 180) / 60).coerceIn(-1.0, 1.0)), "up")
+            }
             "lampreach" -> { // тянется к шнурку лампочки
                 reach = true
                 val st = -0.14 - 0.06 * abs(sin(ph))
@@ -573,6 +786,9 @@ object Renderer {
         when {
             mood == "fish" && note == "miss" -> text("сорвалась, ничего не поймал", 34, 274, 24, false, STATUS_C)
             mood == "dark" && note == "off" -> text("щёлк! выключил свет", 34, 274, 24, false, STATUS_C)
+            mood == "paint" && progress >= 1.0 -> text("нарисовал шедевр!", 34, 274, 24, false, STATUS_C)
+            mood == "plant" && progress >= 1.0 -> text("цветок вырос!", 34, 274, 24, false, STATUS_C)
+            mood == "sneeze" && progress >= 1.0 -> text("апчхи!", 34, 274, 24, false, STATUS_C)
             else -> text((if (mood == "dark") "" else note) + status, 34, 274, 24, false, STATUS_C)
         }
 

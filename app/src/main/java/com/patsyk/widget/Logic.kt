@@ -30,6 +30,20 @@ object Logic {
         "drink" to "выпивает озеро",
         "full" to "наелся и выпил озеро",
         "lampreach" to "тянется к лампочке",
+        "read" to "читает книжку",
+        "music" to "слушает музыку",
+        "dance" to "танцует",
+        "tea" to "пьёт чай",
+        "paint" to "рисует картину",
+        "exercise" to "качается",
+        "meditate" to "медитирует",
+        "bubbles" to "пускает пузыри",
+        "juggle" to "жонглирует",
+        "plant" to "поливает цветок",
+        "sneeze" to "сейчас чихнёт…",
+        "guitar" to "играет на гитаре",
+        "phone" to "сидит в телефоне",
+        "ball" to "играет с мячиком",
     )
 
     /** Из каких шагов состоит эпизод */
@@ -51,7 +65,19 @@ object Logic {
             Step("lampreach", 6),              // тянется к шнурку
             Step("dark", STEP_SEC, note = "off"), // щёлк — темно
         )
-        else -> listOf(Step(type, STEP_SEC))   // idle, happy, eat, sleepy, sleep
+        "paint" -> listOf(
+            Step("paint", 10, 0.0),            // рисует
+            Step("paint", 6, 1.0),             // готово — шедевр!
+        )
+        "plant" -> listOf(
+            Step("plant", 10, 0.0),            // поливает
+            Step("plant", 6, 1.0),             // цветок вырос
+        )
+        "sneeze" -> listOf(
+            Step("sneeze", 4, 0.0),            // а-а-а…
+            Step("sneeze", 5, 1.0),            // апчхи!
+        )
+        else -> listOf(Step(type, STEP_SEC))   // остальные занятия — по 15 секунд
     }
 
     /** mulberry32 — псевдослучайные числа от «зерна» (для мелких деталей рисунка) */
@@ -73,12 +99,24 @@ object Logic {
         val h = hour(now)
         if (h < 7) return "sleep"
         val weights = mutableListOf(
-            "fish" to 0.36, "idle" to 0.24, "happy" to 0.12, "lamp" to 0.10, "eat" to 0.08, "sleepy" to 0.04,
+            "fish" to 0.20, "idle" to 0.09, "happy" to 0.05, "lamp" to 0.07, "eat" to 0.04, "sleepy" to 0.03,
+            "read" to 0.04, "music" to 0.04, "dance" to 0.035, "tea" to 0.035, "paint" to 0.04,
+            "exercise" to 0.035, "meditate" to 0.03, "bubbles" to 0.035, "juggle" to 0.035,
+            "plant" to 0.035, "sneeze" to 0.025, "guitar" to 0.035, "phone" to 0.03, "ball" to 0.035,
         )
-        if (h >= 22 || h == 7) { // вечером и рано утром чаще клюёт носом
-            weights.replaceAll { (k, w) -> k to (if (k == "sleepy") 0.35 else if (k == "fish") w * 0.5 else w) }
+        if (h >= 22 || h == 7) { // вечером и рано утром — спокойнее: клюёт носом, читает, пьёт чай
+            weights.replaceAll { (k, w) ->
+                k to when (k) {
+                    "sleepy" -> 0.25
+                    "read", "tea", "meditate" -> w * 2
+                    "fish", "exercise", "dance", "juggle", "ball" -> w * 0.5
+                    else -> w
+                }
+            }
         }
-        if (prev == "lamp") weights.removeAll { it.first == "lamp" }   // не щёлкает светом два раза подряд
+        // не повторяет то же занятие два раза подряд (кроме рыбалки)
+        val prevBase = if (prev != null && prev.startsWith("fish")) "fish" else prev
+        if (prevBase != null && prevBase != "fish") weights.removeAll { it.first == prevBase }
         val total = weights.sumOf { it.second }
         var r = Random.nextDouble() * total
         var pick = weights.last().first

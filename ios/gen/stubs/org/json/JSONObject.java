@@ -1,0 +1,1 @@
+package org.json; public class JSONObject { public JSONObject(String s){} public JSONObject getJSONObject(String k){return this;} public double getDouble(String k){return 0;} public int getInt(String k){return 0;} }

@@ -1,0 +1,1 @@
+package android.content; public abstract class BroadcastReceiver { public static class PendingResult{ public void finish(){} } public final PendingResult goAsync(){return new PendingResult();} public abstract void onReceive(Context c,Intent i); }

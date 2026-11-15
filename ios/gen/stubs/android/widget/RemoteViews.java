@@ -1,0 +1,1 @@
+package android.widget; public class RemoteViews { public RemoteViews(String p,int l){} public void setImageViewBitmap(int id,android.graphics.Bitmap b){} public void setOnClickPendingIntent(int id,android.app.PendingIntent p){} public void removeAllViews(int id){} public void addView(int id, RemoteViews v){} }

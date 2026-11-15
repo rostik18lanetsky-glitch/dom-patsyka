@@ -99,6 +99,12 @@ object Renderer {
 
     private lateinit var cv: Canvas
 
+    /**
+     * Что рисовать (для кадров iPhone): 0 — всё (Android-виджет),
+     * 1 — только Пацык и предметы (без окна и подписей), 2 — только окно с погодой.
+     */
+    @JvmStatic var layer = 0
+
     // ---- состояние анимации текущего кадра ----
     private var frame = 0
     private var frames = 1
@@ -367,7 +373,7 @@ object Renderer {
         rect(x - 14, y + hh + 6, ww + 28, 9, FRAME)
         if (kind == "snow") oval(x + ww / 2, y + hh - 2, ww / 2 - 4, 5, SNOW)
 
-        if (w != null) {
+        if (w != null && layer == 0) {
             val t = w.t.roundToInt()
             val sign = if (t > 0) "+" else if (t < 0) "−" else ""
             text(sign + abs(t) + "° " + (Weather.LABEL[kind] ?: ""), x - 6, y + hh + 20, 21, false, TITLE)
@@ -436,13 +442,15 @@ object Renderer {
         rect(0, 0, W, H, BG)
         rect(0, 262, W, H - 262, FLOOR)
 
+        if (layer == 2) { windowView(weather, mood == "sleep"); return bmp }  // только окно
+
         val night = mood == "sleep"
         if (night) { // луна и звёзды
             circle(610, 58, 22, MOON); circle(622, 50, 20, BG)
             listOf(250 to 95, 330 to 48, 520 to 40, 215 to 205).forEach { (x, y) -> circle(x, y, 2.5, MOON) }
         }
 
-        windowView(weather, night)
+        if (layer == 0) windowView(weather, night)
 
         val cx = 455.0; val cy = 182.0 + bob
         var headY = cy
@@ -776,6 +784,8 @@ object Renderer {
             line(sx, sy, hx, hy, BODY, 12)
             circle(hx, hy, 9, OUTLINE); circle(hx, hy, 7, BODY)
         }
+
+        if (layer != 0) return bmp   // для iPhone подписи рисует сам виджет
 
         // подписи
         text("Дом Пацыка", 34, 24, 26, true, TITLE)

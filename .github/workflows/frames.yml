@@ -1,0 +1,47 @@
+name: Кадры для iPhone
+
+on:
+  push:
+    paths:
+      - "app/src/main/java/**"
+      - "ios/**"
+      - ".github/workflows/frames.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  frames:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Kotlin
+        run: |
+          curl -sSL -o kc.zip https://github.com/JetBrains/kotlin/releases/download/v2.0.21/kotlin-compiler-2.0.21.zip
+          unzip -q kc.zip
+
+      - name: Рисуем кадры тем же кодом, что и Android-виджет
+        run: |
+          mkdir -p build/stubs build/k out
+          javac -d build/stubs $(find ios/gen/stubs -name '*.java')
+          S=app/src/main/java/com/patsyk/widget
+          kotlinc/bin/kotlinc -cp build/stubs -d build/k \
+            $S/Renderer.kt $S/Logic.kt $S/State.kt $S/Weather.kt ios/gen/FrameGen.kt
+          java -Djava.awt.headless=true -cp "build/stubs:build/k:kotlinc/lib/kotlin-stdlib.jar" FrameGenKt out
+          cp ios/widget.tsx out/widget.tsx
+          cp ios/widget.tsx out/widget.txt
+
+      - name: Публикуем в ветку gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./out
+          publish_branch: gh-pages
+          force_orphan: true

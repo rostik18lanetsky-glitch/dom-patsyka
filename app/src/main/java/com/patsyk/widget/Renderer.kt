@@ -69,6 +69,11 @@ object Renderer {
     private val HAT = col("#d64545")
     private val HAT_BAND = col("#f1f1f1")
     private val EMPTY = col("#3a3a3e")
+    private val FISH = col("#8fb8de")
+    private val FISH_DK = col("#5d8db8")
+    private val STRAW = col("#ff6f91")
+    private val DRY = col("#121214")
+    private val CRACK = col("#2c2c30")
     private val DARKNESS = col("#000000", 0.86)
 
     private lateinit var cv: Canvas
@@ -154,8 +159,8 @@ object Renderer {
         }
     }
 
-    private fun drawBody(cx: Double, cy: Double, squash: Double) {
-        val rx = 82.0; val ry = 76.0
+    private fun drawBody(cx: Double, cy: Double, squash: Double, k: Double = 1.0) {
+        val rx = 82.0 * k; val ry = 76.0 * k
         oval(cx, cy - bob + ry + 2, rx * (1.05 - bob * 0.004), 11, SHADOW) // тень стоит на полу
         fillP(blobPath(cx, cy, rx, ry, squash), BODY)
         strokeP(blobPath(cx, cy, rx, ry, squash), OUTLINE, 5)
@@ -218,9 +223,20 @@ object Renderer {
     }
 
     // ---------- предметы ----------
-    private fun iceHole(x: Double, y: Double) {
-        oval(x, y, 92, 20, WATER)
-        oval(x - 10, y - 4, 58, 9, WATER2)
+    private fun iceHole(x: Double, y: Double, k: Double = 1.0) {
+        oval(x, y, 92, 20, DRY)                              // край проруби
+        if (k > 0.02) {
+            oval(x, y, 92 * k, 20 * k, WATER)
+            oval(x - 10 * k, y - 4 * k, 58 * k, 9 * k, WATER2)
+        }
+    }
+
+    private fun dryHole(x: Double, y: Double) {           // озеро выпито — сухо и трещины
+        oval(x, y, 92, 20, DRY)
+        strokeOval(x, y, 92, 20, CRACK, 2)
+        line(x - 40, y - 6, x - 10, y + 2, CRACK, 2); line(x - 10, y + 2, x + 12, y - 5, CRACK, 2)
+        line(x + 12, y - 5, x + 45, y + 6, CRACK, 2); line(x - 10, y + 2, x - 18, y + 12, CRACK, 2)
+        oval(x + 30, y - 2, 6, 2, WATER)                     // последняя капля
     }
 
     private fun food(x: Double, y: Double, s: Double) {
@@ -239,6 +255,25 @@ object Renderer {
             c(x + 14 * s, y - 2 * s, x + 2 * s, y - 12 * s, x + 14 * s, y - 12 * s)
             c(x, y + 12 * s, x + 14 * s, y + 4 * s, x + 6 * s, y + 6 * s)
         }, color)
+    }
+
+    /** Рыбка: (x, y) — центр, голова слева; rot — поворот в градусах */
+    private fun fish(x: Double, y: Double, s: Double, rot: Double = 0.0) {
+        cv.save()
+        cv.rotate(rot.toFloat(), x.toFloat(), y.toFloat())
+        fillP(Pth().apply { m(x + 16 * s, y); l(x + 32 * s, y - 11 * s); l(x + 30 * s, y); l(x + 32 * s, y + 11 * s); close() }, FISH_DK) // хвост
+        oval(x, y, 21 * s, 10 * s, FISH)                                           // тело
+        fillP(Pth().apply { m(x - 4 * s, y - 8 * s); l(x + 8 * s, y - 15 * s); l(x + 10 * s, y - 8 * s); close() }, FISH_DK) // плавник
+        circle(x - 12 * s, y - 2 * s, 2.6 * s, BLACK)                              // глаз
+        circle(x - 11.4 * s, y - 2.8 * s, 0.9 * s, WHITE)
+        line(x - 3 * s, y - 5 * s, x - 3 * s, y + 5 * s, FISH_DK, 1.4 * s)        // жабры
+        cv.restore()
+    }
+
+    /** Точка на квадратичной кривой (для соломинки) */
+    private fun quadPt(x0: Double, y0: Double, cx: Double, cy: Double, x1: Double, y1: Double, t: Double): Pt {
+        val a = (1 - t) * (1 - t); val b = 2 * (1 - t) * t; val c = t * t
+        return Pt(a * x0 + b * cx + c * x1, a * y0 + b * cy + c * y1)
     }
 
     private fun cloud(x: Double, y: Double, s: Double, color: Int) {
@@ -339,7 +374,8 @@ object Renderer {
     @Synchronized
     fun draw(
         mood: String, note: String, now: Long, weather: WeatherNow?, fedAt: Long,
-        frameIndex: Int = 0, frameCount: Int = 1, scale: Float = 2f
+        frameIndex: Int = 0, frameCount: Int = 1, scale: Float = 2f,
+        progress: Double = 0.0, fishCount: Int = 0
     ): Bitmap {
         frame = frameIndex; frames = frameCount.coerceAtLeast(1)
         ph = 2 * PI * frame / frames
@@ -423,6 +459,59 @@ object Renderer {
                 oval(262, 80, 58, 40, STATUS_C)
                 food(262.0, 78.0, 0.9)
             }
+            "catch" -> { // поймал! рыба висит на леске и бьётся
+                iceHole(225.0, 236.0)
+                val sx = 300 + 5 * sin(ph * 2)
+                line(382, 200, 300, 48, ROD, 6)                       // удочка задрана вверх
+                line(300, 48, sx, 104, LINE, 2)
+                fish(sx, 128.0, 1.25, 90 + 18 * sin(ph * 2))          // рыба трепыхается
+                for (i in 0 until 4) {                                // брызги из проруби
+                    val u = (t01 + i * 0.25) % 1.0
+                    circle(205 + i * 14, 226 - 40 * u + 30 * u * u, 3.5 * (1 - u) + 1, withAlpha(WATER2, 1 - u))
+                }
+                drawBody(cx, cy - 4, -0.05); headY = cy - 4
+                line(378, 196, 398, 206, OUTLINE, 7)
+                face(cx, cy - 4, "open", "o", Pt(-1.0, -0.8), "up")
+            }
+            "eatfish" -> { // ест рыбу
+                iceHole(225.0, 236.0)
+                drawBody(cx, cy, 0.0)
+                val bite = if (anim && frame % 2 == 1) 3.0 else 0.0
+                fish(cx + 48 + bite, cy + 26, 1.1, -8.0)               // рыба у рта, хвост наружу
+                face(cx, cy, "happy", if (anim && frame % 2 == 1) "o" else "chew", blush = true)
+                circle(cx - 66, cy + 82, 3, FISH); circle(cx + 96, cy + 78, 2.5, FISH)
+            }
+            "drink" -> { // пьёт озеро через соломинку
+                val k = (1 - 0.85 * progress).coerceAtLeast(0.15)
+                iceHole(225.0, 236.0, k)
+                drawBody(cx, cy, 0.04 + 0.05 * sin(ph))
+                // соломинка от рта к проруби
+                val x0 = cx + 6; val y0 = cy + 22; val c1x = 330.0; val c1y = 120.0; val x1 = 240.0; val y1 = 232.0
+                val straw = Pth().apply { m(x0, y0); q(x1, y1, c1x, c1y) }
+                strokeP(straw, STRAW, 7)
+                strokeP(Pth().apply { m(x0, y0); q(x1, y1, c1x, c1y) }, withAlpha(WHITE, 0.5), 2)
+                for (i in 0 until 4) {                                // вода бежит по соломинке
+                    val u = 1 - ((t01 + i * 0.25) % 1.0)
+                    val pt = quadPt(x0, y0, c1x, c1y, x1, y1, u)
+                    circle(pt.x, pt.y, 2.6, WATER2)
+                }
+                face(cx, cy, "closed", "o", blush = true)
+                oval(cx - 18, cy + 14, 14 + 3 * sin(ph), 10 + 2 * sin(ph), withAlpha(BODY_HI, 0.8)) // щёки надулись
+                oval(cx + 52, cy + 14, 14 + 3 * sin(ph), 10 + 2 * sin(ph), withAlpha(BODY_HI, 0.8))
+            }
+            "full" -> { // объелся: раздулся, озеро высохло
+                dryHole(225.0, 236.0)
+                val k = 1.16
+                val fcy = 258.0 - 76.0 * k + bob
+                drawBody(cx, fcy, 0.0, k); headY = fcy - 76.0 * (k - 1)
+                face(cx, fcy, "happy", "smile", blush = true)
+                strokeP(Pth().apply { m(cx - 30, fcy + 52); q(cx + 50, fcy + 52, cx + 10, fcy + 66) }, withAlpha(OUTLINE, 0.6), 3) // пузико
+                if (anim && frame in 3..5) text("ик!", cx + 78, fcy - 60, 30, true, STATUS_C)
+                // косточки от рыбы
+                line(318, 254, 358, 254, WHITE, 2.5)
+                for (i in 0 until 4) line(326 + i * 8, 247, 326 + i * 8, 261, WHITE, 2)
+                fillP(Pth().apply { m(358, 254); l(370, 246); l(370, 262); close() }, WHITE)
+            }
             "dark" -> {
                 drawBody(cx, cy, 0.0)
                 face(cx, cy, "open", "flat")
@@ -459,12 +548,19 @@ object Renderer {
         if (mood == "idle" && wk == "storm") status = "боится грозы"
         if (mood == "idle" && wk == "rain") status = "слушает дождь"
         if (mood == "idle" && wk == "snow") status = "смотрит на снег"
-        text((if (mood == "dark") "" else note) + status, 34, 274, 24, false, STATUS_C)
+        if (mood == "fish" && note == "miss") text("сорвалась! жми ещё раз", 34, 274, 24, false, STATUS_C)
+        else text((if (mood == "dark") "" else note) + status, 34, 274, 24, false, STATUS_C)
 
         // «сытость» — оранжевые кубики справа внизу
         val hrs = (now - fedAt) / 3_600_000.0
         val full = ceil(3 - (hrs / Logic.HUNGRY_AFTER_HOURS) * 3).toInt().coerceIn(0, 3)
         for (i in 0 until 3) rect(588 + i * 22, 282, 14, 14, if (i < full) ORANGE else EMPTY)
+
+        // счётчик пойманных рыб
+        if (fishCount > 0) {
+            fish(512.0, 289.0, 0.5)
+            text("×$fishCount", 528, 276, 20, false, STATUS_C)
+        }
 
         return bmp
     }

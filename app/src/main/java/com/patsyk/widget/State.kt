@@ -33,6 +33,23 @@ class State(ctx: Context) {
         get() = p.getLong("lightAt", 0L)
         set(v) = p.edit().putLong("lightAt", v).apply()
 
+    // рыбалка и история «поймал → съел → выпил озеро»
+    var storyAt: Long
+        get() = p.getLong("storyAt", 0L)
+        set(v) = p.edit().putLong("storyAt", v).apply()
+
+    var fishCount: Int
+        get() = p.getInt("fishCount", 0)
+        set(v) = p.edit().putInt("fishCount", v).apply()
+
+    var fishUntil: Long
+        get() = p.getLong("fishUntil", 0L)
+        set(v) = p.edit().putLong("fishUntil", v).apply()
+
+    var missAt: Long
+        get() = p.getLong("missAt", 0L)
+        set(v) = p.edit().putLong("missAt", v).apply()
+
     // координаты (последние известные)
     val hasLoc: Boolean get() = p.contains("lat")
     val lat: Double get() = p.getFloat("lat", 50.45f).toDouble()

@@ -9,12 +9,12 @@ import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
 
-/** Виджет на рабочем столе. Обновляется раз в 15 минут и сразу после действий из меню. */
+/** Виджет на рабочем столе. Обновляется раз в минуту и сразу после нажатий. */
 class PatsykWidget : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
         schedule(context)
-        refreshAsync(context)
+        refreshAsync(context, true)
     }
 
     override fun onEnabled(context: Context) {
@@ -28,15 +28,31 @@ class PatsykWidget : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        if (intent.action == ACTION_TICK) refreshAsync(context)
+        when (intent.action) {
+            ACTION_TICK -> refreshAsync(context, true)
+            ACTION_HOOK -> {
+                // нажали на прорубь — пробуем подсечь
+                val app = context.applicationContext
+                val pending = goAsync()
+                Thread {
+                    try {
+                        Logic.hook(State(app), System.currentTimeMillis())
+                        refresh(app, false)
+                    } catch (e: Exception) {
+                    } finally {
+                        pending.finish()
+                    }
+                }.start()
+            }
+        }
     }
 
-    private fun refreshAsync(context: Context) {
+    private fun refreshAsync(context: Context, fetchWeather: Boolean) {
         val pending = goAsync()
         val app = context.applicationContext
         Thread {
             try {
-                refresh(app, true)
+                refresh(app, fetchWeather)
             } catch (e: Exception) {
                 // не роняем виджет
             } finally {
@@ -47,6 +63,7 @@ class PatsykWidget : AppWidgetProvider() {
 
     companion object {
         const val ACTION_TICK = "com.patsyk.widget.TICK"
+        const val ACTION_HOOK = "com.patsyk.widget.HOOK"
 
         private fun tickIntent(context: Context): PendingIntent =
             PendingIntent.getBroadcast(
@@ -55,22 +72,37 @@ class PatsykWidget : AppWidgetProvider() {
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
 
+        private fun hookIntent(context: Context): PendingIntent =
+            PendingIntent.getBroadcast(
+                context, 2,
+                Intent(context, PatsykWidget::class.java).setAction(ACTION_HOOK),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+
+        /** Раз в минуту (RTC без пробуждения: при выключенном экране ждёт, батарею не тратит) */
         fun schedule(context: Context) {
             val am = context.getSystemService(AlarmManager::class.java) ?: return
-            am.setInexactRepeating(
+            am.setRepeating(
                 AlarmManager.RTC,
-                System.currentTimeMillis() + AlarmManager.INTERVAL_FIFTEEN_MINUTES,
-                AlarmManager.INTERVAL_FIFTEEN_MINUTES,
+                System.currentTimeMillis() + 60_000L,
+                60_000L,
                 tickIntent(context)
             )
         }
 
         /** Перерисовать виджет. fetchWeather=true — можно сходить в интернет (не в главном потоке!) */
+        @Synchronized
         fun refresh(context: Context, fetchWeather: Boolean) {
             val s = State(context)
             val now = System.currentTimeMillis()
             val weather = if (fetchWeather) Weather.get(s, now) else s.weather()
-            val (mood, note) = Logic.pickMood(s, now)
+
+            var m = Logic.pickMood(s, now)
+            // рыбачит сам — иногда ловит без тебя
+            if (m.mood == "fish" && Logic.autoCatch(s, now)) {
+                Logic.startCatch(s, now)
+                m = Logic.pickMood(s, now)
+            }
 
             val open = Intent(context, MenuActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
@@ -78,6 +110,7 @@ class PatsykWidget : AppWidgetProvider() {
                 context, 0, open,
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
+            val left = if (m.mood == "fish") hookIntent(context) else tap
 
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, PatsykWidget::class.java))
@@ -89,13 +122,17 @@ class PatsykWidget : AppWidgetProvider() {
                     val views = RemoteViews(context.packageName, R.layout.widget)
                     views.removeAllViews(R.id.flipper)
                     for (f in 0 until count) {
-                        val bmp = Renderer.draw(mood, note, now, weather, s.fedAt, f, count, scale)
+                        val bmp = Renderer.draw(
+                            m.mood, m.note, now, weather, s.fedAt, f, count, scale,
+                            m.progress, s.fishCount
+                        )
                         val fv = RemoteViews(context.packageName, R.layout.frame)
                         fv.setImageViewBitmap(R.id.frame_img, bmp)
                         views.addView(R.id.flipper, fv)
                     }
                     views.setOnClickPendingIntent(R.id.root, tap)
-                    views.setOnClickPendingIntent(R.id.flipper, tap)
+                    views.setOnClickPendingIntent(R.id.zone_right, tap)
+                    views.setOnClickPendingIntent(R.id.zone_left, left)
                     manager.updateAppWidget(ids, views)
                     return
                 } catch (e: Exception) {

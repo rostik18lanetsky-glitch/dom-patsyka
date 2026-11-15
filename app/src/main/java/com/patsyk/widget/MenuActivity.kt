@@ -69,7 +69,7 @@ class MenuActivity : Activity() {
     private fun showMenu() {
         val s = State(this)
         val now = System.currentTimeMillis()
-        val darkNow = Logic.pickMood(s, now).first == "dark"
+        val darkNow = Logic.pickMood(s, now).mood == "dark"
         val items = arrayOf(
             "🧀 Покормить",
             "🤚 Погладить",
@@ -80,11 +80,15 @@ class MenuActivity : Activity() {
         val acts = arrayOf("eat", "happy", "fish", "sleep")
 
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("Пацык")
+            .setTitle(if (s.fishCount > 0) "Пацык · поймано рыб: ${s.fishCount}" else "Пацык")
             .setItems(items) { _, i ->
-                if (i < acts.size) {
+                if (i < acts.size && acts[i] == "fish") {
+                    s.fishUntil = now + 5 * 60_000L   // рыбачит 5 минут — жми на прорубь!
+                    s.action = null
+                } else if (i < acts.size) {
                     s.action = acts[i]
                     s.actionAt = now
+                    s.fishUntil = 0L
                     if (acts[i] == "eat") s.fedAt = now
                 } else {
                     s.lightOff = !darkNow
